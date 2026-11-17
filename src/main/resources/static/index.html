@@ -1,0 +1,676 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clínica · Citas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #EAF0EE;
+    --surface: #FFFFFF;
+    --ink: #16302B;
+    --muted: #5A6E69;
+    --line: #D3DDDA;
+    --primary: #0F6E62;
+    --primary-ink: #FFFFFF;
+    --primary-soft: #DDEDE9;
+    --scheduled: #2F64C4;
+    --attended: #1D7F46;
+    --cancelled: #7A8584;
+    --noshow: #B83B26;
+    --danger: #B83B26;
+    --radius: 8px;
+    --font: "Atkinson Hyperlegible", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { background: var(--bg); color: var(--ink); font: 16px/1.5 var(--font); }
+  button, input, select { font: inherit; color: inherit; }
+  :focus-visible { outline: 3px solid var(--scheduled); outline-offset: 2px; }
+
+  /* ---------- Estructura ---------- */
+  .app { display: grid; grid-template-columns: 220px 1fr; min-height: 100vh; }
+  .side { background: var(--ink); color: #DCE8E5; padding: 1.5rem 1rem; }
+  .brand { display: flex; align-items: center; gap: .6rem; font-weight: 700; font-size: 1.25rem; color: #fff; margin: 0 .5rem 2rem; }
+  .brand svg { width: 28px; height: 28px; }
+  .side nav { display: grid; gap: .25rem; }
+  .side button {
+    text-align: left; background: none; border: 0; color: inherit;
+    padding: .6rem .75rem; border-radius: var(--radius); cursor: pointer;
+  }
+  .side button:hover { background: rgba(255,255,255,.08); }
+  .side button[aria-current="page"] { background: var(--primary); color: #fff; font-weight: 700; }
+  .side .hint { margin: 2rem .5rem 0; font-size: .85rem; color: #93AAA4; }
+
+  main { padding: 2rem clamp(1rem, 3vw, 2.5rem) 4rem; max-width: 1100px; width: 100%; }
+  .view[hidden] { display: none; }
+  .view-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.5rem; }
+  h1 { font-size: 1.9rem; line-height: 1.15; margin: 0; }
+  .view-head p { margin: .25rem 0 0; color: var(--muted); max-width: 60ch; }
+  h2 { font-size: 1.15rem; margin: 0 0 .75rem; }
+
+  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 1.25rem; }
+  .panel + .panel { margin-top: 1.25rem; }
+
+  /* ---------- Controles ---------- */
+  .btn {
+    display: inline-flex; align-items: center; gap: .4rem;
+    border: 1px solid var(--primary); background: var(--primary); color: var(--primary-ink);
+    padding: .5rem .95rem; border-radius: var(--radius); cursor: pointer; font-weight: 700; white-space: nowrap;
+  }
+  .btn:hover { filter: brightness(1.08); }
+  .btn.ghost { background: transparent; color: var(--primary); }
+  .btn.ghost:hover { background: var(--primary-soft); filter: none; }
+  .btn.small { padding: .25rem .6rem; font-size: .88rem; font-weight: 400; }
+  .btn.danger { border-color: var(--danger); color: var(--danger); background: transparent; }
+  .btn.danger:hover { background: #F8E3DF; filter: none; }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+
+  .field { display: grid; gap: .3rem; }
+  .field label { font-size: .9rem; font-weight: 700; }
+  .field input, .field select {
+    border: 1px solid var(--line); background: #fff; border-radius: var(--radius);
+    padding: .5rem .65rem; min-width: 0;
+  }
+  .field input:disabled { background: var(--bg); color: var(--muted); }
+  .toolbar { display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap; }
+  .toolbar .field { min-width: 200px; }
+
+  /* ---------- Agenda ---------- */
+  .day-title { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; flex-wrap: wrap; margin: 1.5rem 0 .75rem; }
+  .day-title strong { font-size: 1.3rem; }
+  .day-title span { color: var(--muted); }
+  .slots { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
+  .slot {
+    display: grid; grid-template-columns: 4.5rem 1fr auto; gap: 1rem; align-items: center;
+    padding: .55rem .25rem; border-bottom: 1px solid var(--line); min-height: 3.6rem;
+  }
+  .slot time { font-variant-numeric: tabular-nums; font-weight: 700; font-size: 1.05rem; }
+  .slot.hour time { color: var(--ink); }
+  .slot.half time { color: var(--muted); font-weight: 400; }
+  .slot .free { color: var(--muted); font-size: .95rem; }
+  .slot.past { background: repeating-linear-gradient(-45deg, transparent 0 8px, rgba(22,48,43,.035) 8px 16px); }
+  .slot.past .free { font-style: italic; }
+  .appt {
+    border-left: 4px solid var(--c); background: color-mix(in srgb, var(--c) 8%, white);
+    padding: .4rem .7rem; border-radius: 0 var(--radius) var(--radius) 0;
+    display: flex; flex-wrap: wrap; gap: .15rem 1rem; align-items: baseline;
+  }
+  .appt b { font-size: 1rem; }
+  .appt small { color: var(--muted); }
+  .actions { display: flex; gap: .4rem; flex-wrap: wrap; justify-content: flex-end; }
+
+  .chip { display: inline-block; font-size: .8rem; font-weight: 700; padding: .05rem .5rem; border-radius: 999px; color: #fff; background: var(--c); }
+  .s-SCHEDULED { --c: var(--scheduled); }
+  .s-ATTENDED { --c: var(--attended); }
+  .s-CANCELLED { --c: var(--cancelled); }
+  .s-NO_SHOW { --c: var(--noshow); }
+
+  /* ---------- Tablas ---------- */
+  .table-wrap { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { text-align: left; padding: .6rem .5rem; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  th { font-size: .85rem; color: var(--muted); font-weight: 700; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  td.actions-cell { text-align: right; white-space: nowrap; }
+  td.actions-cell .btn + .btn { margin-left: .3rem; }
+  .blocked { color: var(--danger); font-weight: 700; }
+  .empty { color: var(--muted); padding: 1rem .25rem; margin: 0; }
+
+  /* ---------- Diálogo ---------- */
+  dialog { border: 0; border-radius: 12px; padding: 0; width: min(480px, calc(100vw - 2rem)); color: var(--ink); }
+  dialog::backdrop { background: rgba(22, 48, 43, .45); }
+  dialog form { padding: 1.5rem; display: grid; gap: 1rem; }
+  dialog h2 { margin: 0; font-size: 1.3rem; }
+  .dialog-note { margin: -.5rem 0 0; color: var(--muted); font-size: .92rem; }
+  .dialog-actions { display: flex; justify-content: flex-end; gap: .5rem; margin-top: .5rem; }
+  .form-error { color: var(--danger); margin: 0; font-size: .95rem; }
+  .form-error:empty { display: none; }
+
+  /* ---------- Avisos ---------- */
+  #toasts { position: fixed; right: 1rem; bottom: 1rem; display: grid; gap: .5rem; z-index: 10; max-width: min(420px, calc(100vw - 2rem)); }
+  .toast { background: var(--ink); color: #fff; padding: .75rem 1rem; border-radius: var(--radius); box-shadow: 0 10px 30px -12px rgba(0,0,0,.5); border-left: 5px solid var(--attended); }
+  .toast.error { border-left-color: #F07A63; }
+  .toast b { display: block; font-size: .85rem; opacity: .8; }
+
+  @media (max-width: 760px) {
+    .app { grid-template-columns: 1fr; }
+    .side { padding: .75rem 1rem; position: sticky; top: 0; z-index: 5; }
+    .brand { margin: 0 0 .5rem; font-size: 1.1rem; }
+    .side nav { grid-template-columns: repeat(4, auto); overflow-x: auto; }
+    .side button { text-align: center; padding: .45rem .6rem; }
+    .side .hint { display: none; }
+    .slot { grid-template-columns: 3.6rem 1fr; }
+    .slot .actions { grid-column: 2; justify-content: flex-start; }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .toast { animation: rise .2s ease-out; }
+    @keyframes rise { from { transform: translateY(8px); opacity: 0; } }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="brand">
+      <svg viewBox="0 0 28 28" aria-hidden="true"><rect width="28" height="28" rx="7" fill="#0F6E62"/><path d="M11.5 6h5v5.5H22v5h-5.5V22h-5v-5.5H6v-5h5.5z" fill="#fff"/></svg>
+      Clínica
+    </div>
+    <nav aria-label="Secciones">
+      <button type="button" data-view="agenda" aria-current="page">Agenda</button>
+      <button type="button" data-view="citas">Citas</button>
+      <button type="button" data-view="medicos">Médicos</button>
+      <button type="button" data-view="pacientes">Pacientes</button>
+    </nav>
+    <p class="hint">Citas de 30 minutos, de lunes a viernes entre 8:00 y 17:00.</p>
+  </aside>
+
+  <main>
+    <!-- ================= AGENDA ================= -->
+    <section class="view" id="view-agenda">
+      <div class="view-head">
+        <div>
+          <h1>Agenda del día</h1>
+          <p>Elige un médico y una fecha. Los bloques libres se pueden agendar con un clic.</p>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="toolbar">
+          <div class="field">
+            <label for="agenda-doctor">Médico</label>
+            <select id="agenda-doctor"></select>
+          </div>
+          <div class="field">
+            <label for="agenda-date">Fecha</label>
+            <input type="date" id="agenda-date">
+          </div>
+          <button class="btn ghost" type="button" id="agenda-prev" aria-label="Día anterior">◀</button>
+          <button class="btn ghost" type="button" id="agenda-next" aria-label="Día siguiente">▶</button>
+        </div>
+        <div id="agenda-body"></div>
+      </div>
+    </section>
+
+    <!-- ================= CITAS ================= -->
+    <section class="view" id="view-citas" hidden>
+      <div class="view-head">
+        <div>
+          <h1>Citas</h1>
+          <p>Busca una cita por su número o revisa el historial de un paciente.</p>
+        </div>
+      </div>
+      <div class="panel">
+        <h2>Buscar por número</h2>
+        <form class="toolbar" id="search-number">
+          <div class="field">
+            <label for="number-input">Número de cita</label>
+            <input id="number-input" placeholder="CITA-0001" required>
+          </div>
+          <button class="btn" type="submit">Buscar</button>
+        </form>
+        <div id="number-result"></div>
+      </div>
+      <div class="panel">
+        <h2>Historial de un paciente</h2>
+        <div class="toolbar">
+          <div class="field">
+            <label for="history-patient">Paciente</label>
+            <select id="history-patient"></select>
+          </div>
+        </div>
+        <div id="history-result"></div>
+      </div>
+    </section>
+
+    <!-- ================= MÉDICOS ================= -->
+    <section class="view" id="view-medicos" hidden>
+      <div class="view-head">
+        <div>
+          <h1>Médicos</h1>
+          <p>Un médico con citas programadas no se puede eliminar.</p>
+        </div>
+        <button class="btn" type="button" id="new-doctor">Nuevo médico</button>
+      </div>
+      <div class="panel table-wrap" id="doctors-table"></div>
+    </section>
+
+    <!-- ================= PACIENTES ================= -->
+    <section class="view" id="view-pacientes" hidden>
+      <div class="view-head">
+        <div>
+          <h1>Pacientes</h1>
+          <p>Con 2 inasistencias un paciente queda bloqueado para agendar.</p>
+        </div>
+        <button class="btn" type="button" id="new-patient">Nuevo paciente</button>
+      </div>
+      <div class="panel table-wrap" id="patients-table"></div>
+    </section>
+  </main>
+</div>
+
+<!-- ================= DIÁLOGOS ================= -->
+<dialog id="doctor-dialog">
+  <form method="dialog" id="doctor-form">
+    <h2 id="doctor-title">Nuevo médico</h2>
+    <div class="field"><label for="d-license">Licencia</label><input id="d-license" name="license" required placeholder="MED-100"></div>
+    <div class="field"><label for="d-name">Nombre completo</label><input id="d-name" name="fullName" required></div>
+    <div class="field"><label for="d-specialty">Especialidad</label><input id="d-specialty" name="specialty" required></div>
+    <div class="field"><label for="d-fee">Tarifa de consulta (COP)</label><input id="d-fee" name="consultationFee" type="number" min="0" step="1000" required></div>
+    <p class="form-error" id="doctor-error"></p>
+    <div class="dialog-actions">
+      <button class="btn ghost" type="button" data-close>Cerrar</button>
+      <button class="btn" type="submit" id="doctor-submit">Crear médico</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="patient-dialog">
+  <form method="dialog" id="patient-form">
+    <h2 id="patient-title">Nuevo paciente</h2>
+    <div class="field"><label for="p-document">Documento</label><input id="p-document" name="document" required></div>
+    <div class="field"><label for="p-name">Nombre completo</label><input id="p-name" name="fullName" required></div>
+    <div class="field"><label for="p-birth">Fecha de nacimiento</label><input id="p-birth" name="birthDate" type="date" required></div>
+    <div class="field">
+      <label for="p-insurance">Seguro</label>
+      <select id="p-insurance" name="insuranceType">
+        <option value="NONE">Sin seguro: paga el 100 %</option>
+        <option value="BASIC">Básico: paga el 50 %</option>
+        <option value="FULL">Completo: no paga</option>
+      </select>
+    </div>
+    <p class="form-error" id="patient-error"></p>
+    <div class="dialog-actions">
+      <button class="btn ghost" type="button" data-close>Cerrar</button>
+      <button class="btn" type="submit" id="patient-submit">Crear paciente</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="book-dialog">
+  <form method="dialog" id="book-form">
+    <h2>Agendar cita</h2>
+    <p class="dialog-note" id="book-summary"></p>
+    <div class="field">
+      <label for="book-patient">Paciente</label>
+      <select id="book-patient" required></select>
+    </div>
+    <p class="form-error" id="book-error"></p>
+    <div class="dialog-actions">
+      <button class="btn ghost" type="button" data-close>Cerrar</button>
+      <button class="btn" type="submit">Agendar</button>
+    </div>
+  </form>
+</dialog>
+
+<div id="toasts" role="status" aria-live="polite"></div>
+
+<script>
+  const STATUS = { SCHEDULED: "Programada", ATTENDED: "Atendida", CANCELLED: "Cancelada", NO_SHOW: "No asistió" };
+  const INSURANCE = { NONE: "Sin seguro", BASIC: "Básico", FULL: "Completo" };
+  const money = new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 });
+  const longDate = new Intl.DateTimeFormat("es-CO", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+  const shortDateTime = new Intl.DateTimeFormat("es-CO", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false });
+
+  const state = { doctors: [], patients: [] };
+  const $ = id => document.getElementById(id);
+
+  // ---------- Utilidades ----------
+  function h(tag, attrs = {}, ...children) {
+    const node = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs)) {
+      if (v === false || v == null) continue;
+      if (k.startsWith("on")) node.addEventListener(k.slice(2), v);
+      else if (k === "class") node.className = v;
+      else node.setAttribute(k, v === true ? "" : v);
+    }
+    for (const c of children.flat()) if (c != null) node.append(c);
+    return node;
+  }
+
+  async function api(method, url, body) {
+    const res = await fetch(url, {
+      method,
+      headers: body ? { "Content-Type": "application/json" } : {},
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    if (res.status === 204) return null;
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      const err = new Error(data?.message || `Error ${res.status}`);
+      err.status = res.status;
+      throw err;
+    }
+    return data;
+  }
+
+  function toast(message, isError = false, status) {
+    const t = h("div", { class: "toast" + (isError ? " error" : "") },
+      status ? h("b", {}, `HTTP ${status}`) : null, message);
+    $("toasts").append(t);
+    setTimeout(() => t.remove(), isError ? 7000 : 3500);
+  }
+
+  const pad = n => String(n).padStart(2, "0");
+  const isoDate = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const parseDate = s => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); };
+  const statusChip = s => h("span", { class: `chip s-${s}` }, STATUS[s] || s);
+
+  function nextWeekday(from = new Date()) {
+    const d = new Date(from); d.setHours(0, 0, 0, 0);
+    while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1);
+    return d;
+  }
+
+  // ---------- Navegación ----------
+  function show(view) {
+    document.querySelectorAll(".side button").forEach(b => {
+      if (b.dataset.view === view) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current");
+    });
+    document.querySelectorAll(".view").forEach(v => v.hidden = v.id !== `view-${view}`);
+    if (view === "agenda") renderAgenda();
+    if (view === "citas") renderHistory();
+    if (view === "medicos") renderDoctors();
+    if (view === "pacientes") renderPatients();
+  }
+  document.querySelectorAll(".side button").forEach(b => b.addEventListener("click", () => {
+    history.replaceState(null, "", `${location.search}#${b.dataset.view}`);
+    show(b.dataset.view);
+  }));
+  document.querySelectorAll("[data-close]").forEach(b => b.addEventListener("click", () => b.closest("dialog").close()));
+
+  async function loadDirectory() {
+    [state.doctors, state.patients] = await Promise.all([api("GET", "/api/doctor"), api("GET", "/api/patient")]);
+    fillSelect($("agenda-doctor"), state.doctors, d => d.license, d => `${d.fullName} · ${d.specialty}`, "No hay médicos registrados");
+    fillSelect($("history-patient"), state.patients, p => p.document, p => `${p.fullName} (${p.document})`, "No hay pacientes registrados");
+  }
+
+  function fillSelect(select, items, value, label, emptyText) {
+    const current = select.value;
+    select.replaceChildren(...(items.length
+      ? items.map(i => h("option", { value: value(i) }, label(i)))
+      : [h("option", { value: "" }, emptyText)]));
+    if (items.some(i => value(i) === current)) select.value = current;
+  }
+
+  // ---------- Agenda ----------
+  const SLOTS = [];
+  for (let m = 8 * 60; m <= 16 * 60 + 30; m += 30) SLOTS.push(`${pad(Math.floor(m / 60))}:${pad(m % 60)}`);
+
+  async function renderAgenda() {
+    const body = $("agenda-body");
+    const license = $("agenda-doctor").value;
+    const date = $("agenda-date").value;
+    if (!license) {
+      body.replaceChildren(h("p", { class: "empty" }, "Registra un médico en la sección Médicos para ver su agenda."));
+      return;
+    }
+    const day = parseDate(date);
+    const doctor = state.doctors.find(d => d.license === license);
+    const title = h("div", { class: "day-title" },
+      h("strong", {}, longDate.format(day).replace(/^./, c => c.toUpperCase())),
+      h("span", {}, `${doctor.fullName} · tarifa ${money.format(doctor.consultationFee)}`));
+
+    if (day.getDay() === 0 || day.getDay() === 6) {
+      body.replaceChildren(title, h("p", { class: "empty" }, "No hay atención los fines de semana. Elige un día entre lunes y viernes."));
+      return;
+    }
+
+    let appointments = [];
+    try {
+      appointments = await api("GET", `/api/appointment?doctorLicense=${encodeURIComponent(license)}&date=${date}`);
+    } catch (e) { toast(e.message, true, e.status); }
+
+    const now = new Date();
+    const list = h("ol", { class: "slots" });
+    for (const time of SLOTS) {
+      const slotDate = new Date(`${date}T${time}:00`);
+      const inSlot = appointments.filter(a => a.dateTime.slice(11, 16) === time);
+      const active = inSlot.find(a => a.status === "SCHEDULED");
+      const past = slotDate <= now;
+      const li = h("li", { class: `slot ${time.endsWith("00") ? "hour" : "half"}${past ? " past" : ""}` },
+        h("time", { datetime: `${date}T${time}` }, time));
+
+      const content = h("div", {});
+      if (inSlot.length) {
+        for (const a of inSlot) content.append(appointmentCard(a));
+      } else {
+        content.append(h("span", { class: "free" }, past ? "Ya pasó" : "Libre"));
+      }
+      li.append(content);
+
+      const actions = h("div", { class: "actions" });
+      if (active) {
+        actions.append(
+          h("button", { class: "btn small", type: "button", onclick: () => changeStatus(active.number, "attend") }, "Atender"),
+          h("button", { class: "btn small ghost", type: "button", onclick: () => changeStatus(active.number, "cancel") }, "Cancelar"),
+          h("button", { class: "btn small danger", type: "button", onclick: () => changeStatus(active.number, "no-show") }, "No asistió"));
+      } else if (!past) {
+        actions.append(h("button", { class: "btn small ghost", type: "button", onclick: () => openBooking(license, `${date}T${time}:00`) }, "Agendar"));
+      }
+      li.append(actions);
+      list.append(li);
+    }
+    body.replaceChildren(title, list);
+  }
+
+  function appointmentCard(a) {
+    return h("div", { class: `appt s-${a.status}` },
+      h("b", {}, a.patientName),
+      statusChip(a.status),
+      h("small", {}, `${a.number} · ${INSURANCE[a.insuranceType]} · paga ${money.format(a.amountToPay)}`));
+  }
+
+  async function changeStatus(number, action) {
+    const verb = { attend: "atendida", cancel: "cancelada", "no-show": "marcada como inasistencia" }[action];
+    try {
+      await api("PATCH", `/api/appointment/${encodeURIComponent(number)}/${action}`);
+      toast(`Cita ${number} ${verb}`);
+      if (action === "no-show") await loadDirectory();
+      refreshCurrent();
+    } catch (e) { toast(e.message, true, e.status); }
+  }
+
+  function shiftDay(delta) {
+    const d = parseDate($("agenda-date").value);
+    do { d.setDate(d.getDate() + delta); } while (d.getDay() === 0 || d.getDay() === 6);
+    $("agenda-date").value = isoDate(d);
+    renderAgenda();
+  }
+  $("agenda-prev").addEventListener("click", () => shiftDay(-1));
+  $("agenda-next").addEventListener("click", () => shiftDay(1));
+  $("agenda-doctor").addEventListener("change", renderAgenda);
+  $("agenda-date").addEventListener("change", renderAgenda);
+
+  // ---------- Agendar ----------
+  let booking = null;
+  function openBooking(license, dateTime) {
+    if (!state.patients.length) { toast("Primero registra un paciente en la sección Pacientes", true); return; }
+    booking = { doctorLicense: license, dateTime };
+    const doctor = state.doctors.find(d => d.license === license);
+    $("book-summary").textContent = `${doctor.fullName}, ${shortDateTime.format(new Date(dateTime))}`;
+    fillSelect($("book-patient"), state.patients, p => p.document,
+      p => `${p.fullName} (${p.document}) · ${INSURANCE[p.insuranceType]}${p.noShowCount >= 2 ? " · bloqueado" : ""}`, "");
+    $("book-error").textContent = "";
+    $("book-dialog").showModal();
+  }
+  $("book-form").addEventListener("submit", async e => {
+    e.preventDefault();
+    try {
+      const a = await api("POST", "/api/appointment", { ...booking, patientDocument: $("book-patient").value });
+      $("book-dialog").close();
+      toast(`Cita ${a.number} agendada · paga ${money.format(a.amountToPay)}`);
+      renderAgenda();
+    } catch (err) { $("book-error").textContent = `${err.status}: ${err.message}`; }
+  });
+
+  // ---------- Citas ----------
+  function appointmentsTable(list, emptyText) {
+    if (!list.length) return h("p", { class: "empty" }, emptyText);
+    return h("div", { class: "table-wrap" }, h("table", {},
+      h("thead", {}, h("tr", {}, ["Número", "Fecha", "Médico", "Paciente", "Estado", "Valor", ""].map(t => h("th", {}, t)))),
+      h("tbody", {}, list.map(a => h("tr", {},
+        h("td", {}, a.number),
+        h("td", {}, shortDateTime.format(new Date(a.dateTime))),
+        h("td", {}, `${a.doctorName}`, h("br"), h("small", {}, a.specialty)),
+        h("td", {}, a.patientName),
+        h("td", {}, statusChip(a.status)),
+        h("td", { class: "num" }, money.format(a.amountToPay)),
+        h("td", { class: "actions-cell" }, a.status === "SCHEDULED" ? [
+          h("button", { class: "btn small", type: "button", onclick: () => changeStatus(a.number, "attend") }, "Atender"),
+          h("button", { class: "btn small ghost", type: "button", onclick: () => changeStatus(a.number, "cancel") }, "Cancelar"),
+          h("button", { class: "btn small danger", type: "button", onclick: () => changeStatus(a.number, "no-show") }, "No asistió"),
+        ] : [])
+      )))));
+  }
+
+  let lastNumber = null;
+  $("search-number").addEventListener("submit", async e => {
+    e.preventDefault();
+    lastNumber = $("number-input").value.trim().toUpperCase();
+    renderNumber();
+  });
+  async function renderNumber() {
+    if (!lastNumber) return;
+    try {
+      const a = await api("GET", `/api/appointment/${encodeURIComponent(lastNumber)}`);
+      $("number-result").replaceChildren(appointmentsTable([a], ""));
+    } catch (err) {
+      $("number-result").replaceChildren(h("p", { class: "empty" }, err.message));
+    }
+  }
+
+  async function renderHistory() {
+    const document_ = $("history-patient").value;
+    if (!document_) { $("history-result").replaceChildren(); return; }
+    try {
+      const list = await api("GET", `/api/appointment/patient/${encodeURIComponent(document_)}`);
+      $("history-result").replaceChildren(appointmentsTable(list, "Este paciente todavía no tiene citas."));
+    } catch (err) { toast(err.message, true, err.status); }
+  }
+  $("history-patient").addEventListener("change", renderHistory);
+
+  // ---------- Médicos ----------
+  function renderDoctors() {
+    const box = $("doctors-table");
+    if (!state.doctors.length) { box.replaceChildren(h("p", { class: "empty" }, "Aún no hay médicos. Usa “Nuevo médico” para registrar el primero.")); return; }
+    box.replaceChildren(h("table", {},
+      h("thead", {}, h("tr", {}, ["Licencia", "Nombre", "Especialidad", "Tarifa", ""].map(t => h("th", {}, t)))),
+      h("tbody", {}, state.doctors.map(d => h("tr", {},
+        h("td", {}, d.license), h("td", {}, d.fullName), h("td", {}, d.specialty),
+        h("td", { class: "num" }, money.format(d.consultationFee)),
+        h("td", { class: "actions-cell" },
+          h("button", { class: "btn small ghost", type: "button", onclick: () => openDoctor(d) }, "Editar"),
+          h("button", { class: "btn small danger", type: "button", onclick: () => deleteDoctor(d) }, "Eliminar")))))));
+  }
+
+  let editingDoctor = null;
+  function openDoctor(doctor = null) {
+    editingDoctor = doctor;
+    const f = $("doctor-form");
+    f.reset();
+    $("doctor-title").textContent = doctor ? "Editar médico" : "Nuevo médico";
+    $("doctor-submit").textContent = doctor ? "Guardar cambios" : "Crear médico";
+    $("d-license").disabled = !!doctor;
+    if (doctor) {
+      $("d-license").value = doctor.license; $("d-name").value = doctor.fullName;
+      $("d-specialty").value = doctor.specialty; $("d-fee").value = doctor.consultationFee;
+    }
+    $("doctor-error").textContent = "";
+    $("doctor-dialog").showModal();
+  }
+  $("new-doctor").addEventListener("click", () => openDoctor());
+  $("doctor-form").addEventListener("submit", async e => {
+    e.preventDefault();
+    const body = { fullName: $("d-name").value, specialty: $("d-specialty").value, consultationFee: Number($("d-fee").value) };
+    try {
+      if (editingDoctor) await api("PUT", `/api/doctor/${encodeURIComponent(editingDoctor.license)}`, body);
+      else await api("POST", "/api/doctor", { license: $("d-license").value.trim(), ...body });
+      $("doctor-dialog").close();
+      toast(editingDoctor ? "Médico actualizado" : "Médico creado");
+      await loadDirectory(); renderDoctors();
+    } catch (err) { $("doctor-error").textContent = `${err.status}: ${err.message}`; }
+  });
+  async function deleteDoctor(d) {
+    if (!confirm(`¿Eliminar a ${d.fullName} (${d.license})?`)) return;
+    try {
+      await api("DELETE", `/api/doctor/${encodeURIComponent(d.license)}`);
+      toast("Médico eliminado");
+      await loadDirectory(); renderDoctors();
+    } catch (err) { toast(err.message, true, err.status); }
+  }
+
+  // ---------- Pacientes ----------
+  function renderPatients() {
+    const box = $("patients-table");
+    if (!state.patients.length) { box.replaceChildren(h("p", { class: "empty" }, "Aún no hay pacientes. Usa “Nuevo paciente” para registrar el primero.")); return; }
+    box.replaceChildren(h("table", {},
+      h("thead", {}, h("tr", {}, ["Documento", "Nombre", "Nacimiento", "Seguro", "Inasistencias", ""].map(t => h("th", {}, t)))),
+      h("tbody", {}, state.patients.map(p => h("tr", {},
+        h("td", {}, p.document), h("td", {}, p.fullName), h("td", {}, p.birthDate),
+        h("td", {}, INSURANCE[p.insuranceType]),
+        h("td", {}, p.noShowCount >= 2 ? h("span", { class: "blocked" }, `${p.noShowCount} · bloqueado`) : String(p.noShowCount)),
+        h("td", { class: "actions-cell" },
+          h("button", { class: "btn small ghost", type: "button", onclick: () => openPatient(p) }, "Editar"),
+          h("button", { class: "btn small danger", type: "button", onclick: () => deletePatient(p) }, "Eliminar")))))));
+  }
+
+  let editingPatient = null;
+  function openPatient(patient = null) {
+    editingPatient = patient;
+    $("patient-form").reset();
+    $("patient-title").textContent = patient ? "Editar paciente" : "Nuevo paciente";
+    $("patient-submit").textContent = patient ? "Guardar cambios" : "Crear paciente";
+    $("p-document").disabled = !!patient;
+    if (patient) {
+      $("p-document").value = patient.document; $("p-name").value = patient.fullName;
+      $("p-birth").value = patient.birthDate; $("p-insurance").value = patient.insuranceType;
+    }
+    $("patient-error").textContent = "";
+    $("patient-dialog").showModal();
+  }
+  $("new-patient").addEventListener("click", () => openPatient());
+  $("patient-form").addEventListener("submit", async e => {
+    e.preventDefault();
+    const body = { fullName: $("p-name").value, birthDate: $("p-birth").value, insuranceType: $("p-insurance").value };
+    try {
+      if (editingPatient) await api("PUT", `/api/patient/${encodeURIComponent(editingPatient.document)}`, body);
+      else await api("POST", "/api/patient", { document: $("p-document").value.trim(), ...body });
+      $("patient-dialog").close();
+      toast(editingPatient ? "Paciente actualizado" : "Paciente creado");
+      await loadDirectory(); renderPatients();
+    } catch (err) { $("patient-error").textContent = `${err.status}: ${err.message}`; }
+  });
+  async function deletePatient(p) {
+    if (!confirm(`¿Eliminar a ${p.fullName} (${p.document})?`)) return;
+    try {
+      await api("DELETE", `/api/patient/${encodeURIComponent(p.document)}`);
+      toast("Paciente eliminado");
+      await loadDirectory(); renderPatients();
+    } catch (err) { toast(err.message, true, err.status); }
+  }
+
+  // ---------- Inicio ----------
+  function refreshCurrent() {
+    const current = document.querySelector(".view:not([hidden])").id.replace("view-", "");
+    if (current === "agenda") renderAgenda();
+    if (current === "citas") { renderNumber(); renderHistory(); }
+  }
+
+  // Fecha inicial: ?date=yyyy-MM-dd, o el próximo día hábil con bloques disponibles
+  const requested = new URLSearchParams(location.search).get("date");
+  const now = new Date();
+  const lastSlotPassed = now.getHours() * 60 + now.getMinutes() >= 16 * 60 + 30;
+  const start = new Date(now);
+  if (lastSlotPassed) start.setDate(start.getDate() + 1);
+  $("agenda-date").value = /^\d{4}-\d{2}-\d{2}$/.test(requested || "") ? requested : isoDate(nextWeekday(start));
+  const VIEWS = ["agenda", "citas", "medicos", "pacientes"];
+  const initialView = VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : "agenda";
+  loadDirectory()
+    .then(() => show(initialView))
+    .catch(() => toast("No se pudo conectar con la API. ¿Está corriendo la aplicación?", true));
+</script>
+</body>
+</html>
